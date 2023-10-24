@@ -12,7 +12,7 @@ import argparse
 file_dir = os.path.dirname(__file__)  # the directory that options.py resides in
 
 
-class MonodepthOptions:
+class MonodepthOptions_2:
     def __init__(self):
         self.parser = argparse.ArgumentParser(description="Monodepthv2 options")
 
@@ -20,7 +20,7 @@ class MonodepthOptions:
         self.parser.add_argument("--data_path",
                                  type=str,
                                  help="path to the training data",
-                                 default=os.path.join(file_dir, "kitti_data"))
+                                 default='/home/yoosof/Documents/GitHub/monodepth2/train')
         self.parser.add_argument("--log_dir",
                                  type=str,
                                  help="log directory",
@@ -44,8 +44,8 @@ class MonodepthOptions:
         self.parser.add_argument("--dataset",
                                  type=str,
                                  help="dataset to train on",
-                                 default="kitti",
-                                 choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test"])
+                                 default="MonoDataset_C",
+                                 choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test","MonoDataset_C"])
         self.parser.add_argument("--png",
                                  help="if set, trains from raw KITTI png files (instead of jpgs)",
                                  action="store_true")

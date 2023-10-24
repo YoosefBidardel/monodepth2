@@ -1,20 +1,17 @@
-# Copyright Niantic 2019. Patent Pending. All rights reserved.
-#
-# This software is licensed under the terms of the Monodepth2 licence
-# which allows for non-commercial use only, the full terms of which are made
-# available in the LICENSE file.
-
 from __future__ import absolute_import, division, print_function
-
+import matplotlib.pyplot as plt
 import os
 import random
 import numpy as np
 import copy
 from PIL import Image  # using pillow-simd for increased speed
+from PIL import ImageFile
 
 import torch
 import torch.utils.data as data
 from torchvision import transforms
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def pil_loader(path):
@@ -25,7 +22,7 @@ def pil_loader(path):
             return img.convert('RGB')
 
 
-class MonoDataset(data.Dataset):
+class MonoDataset_C(data.Dataset):
     """Superclass for monocular dataloaders
 
     Args:
@@ -38,15 +35,16 @@ class MonoDataset(data.Dataset):
         is_train
         img_ext
     """
+
     def __init__(self,
                  data_path,
                  filenames,
                  height,
                  width,
-                 frame_idxs,
+
                  num_scales,
                  is_train=False,
-                 img_ext='.jpg'):
+                 img_ext='.png'):
         super(MonoDataset, self).__init__()
 
         self.data_path = data_path
@@ -54,9 +52,13 @@ class MonoDataset(data.Dataset):
         self.height = height
         self.width = width
         self.num_scales = num_scales
-        self.interp = Image.ANTIALIAS
+        self.interp = Image.LANCZOS
+        self.K = np.array([[0.58, 0, 0.5, 0],
+                           [0, 1.92, 0.5, 0],
+                           [0, 0, 1, 0],
+                           [0, 0, 0, 1]], dtype=np.float32)
 
-        self.frame_idxs = frame_idxs
+        # self.frame_idxs = frame_idxs
 
         self.is_train = is_train
         self.img_ext = img_ext
@@ -84,8 +86,7 @@ class MonoDataset(data.Dataset):
             s = 2 ** i
             self.resize[i] = transforms.Resize((self.height // s, self.width // s),
                                                interpolation=self.interp)
-
-        self.load_depth = self.check_depth()
+        # self.load_depth = self.check_depth()
 
     def preprocess(self, inputs, color_aug):
         """Resize colour images to the required scales and augment if required
@@ -141,11 +142,11 @@ class MonoDataset(data.Dataset):
         do_flip = self.is_train and random.random() > 0.5
 
         line = self.filenames[index].split()
-
-
-
         folder = line[0]
-
+        img_left = os.path.join(self.data_path, 'left', folder)
+        img_right = os.path.join(self.data_path, 'right', folder)
+        self.plotlib_image([img_right, img_left])
+        self.plot_image([img_right, img_left])
         if len(line) == 3:
             frame_index = int(line[1])
         else:
@@ -156,17 +157,16 @@ class MonoDataset(data.Dataset):
         else:
             side = None
 
-        for i in self.frame_idxs:
-            if i == "s":
-                other_side = {"r": "l", "l": "r"}[side]
-                inputs[("color", i, -1)] = self.get_color(folder, frame_index, other_side, do_flip)
-            else:
-                inputs[("color", i, -1)] = self.get_color(folder, frame_index + i, side, do_flip)
+        # for i in self.frame_idxs:
+        #     if i == "s":
+        #         other_side = {"r": "l", "l": "r"}[side]
+        #         inputs[("color", i, -1)] = self.get_color(folder, frame_index, other_side, do_flip)
+        #     else:
+        #         inputs[("color", i, -1)] = self.get_color(folder, frame_index + i, side, do_flip)
 
         # adjusting intrinsics to match each scale in the pyramid
         for scale in range(self.num_scales):
             K = self.K.copy()
-
             K[0, :] *= self.width // (2 ** scale)
             K[1, :] *= self.height // (2 ** scale)
 
@@ -182,28 +182,60 @@ class MonoDataset(data.Dataset):
             color_aug = (lambda x: x)
 
         self.preprocess(inputs, color_aug)
+        # for i in self.frame_idxs:
+        #     del inputs[("color", i, -1)]
+        #     del inputs[("color_aug", i, -1)]
 
-        for i in self.frame_idxs:
-            del inputs[("color", i, -1)]
-            del inputs[("color_aug", i, -1)]
+        # if self.load_depth:
+        #     depth_gt = self.get_depth(folder, frame_index, side, do_flip)
+        #     inputs["depth_gt"] = np.expand_dims(depth_gt, 0)
+        #     inputs["depth_gt"] = torch.from_numpy(inputs["depth_gt"].astype(np.float32))
 
-        if self.load_depth:
-            depth_gt = self.get_depth(folder, frame_index, side, do_flip)
-            inputs["depth_gt"] = np.expand_dims(depth_gt, 0)
-            inputs["depth_gt"] = torch.from_numpy(inputs["depth_gt"].astype(np.float32))
+        # if "s" in self.frame_idxs:
+        #     stereo_T = np.eye(4, dtype=np.float32)
+        #     baseline_sign = -1 if do_flip else 1
+        #     side_sign = -1 if side == "l" else 1
+        #     stereo_T[0, 3] = side_sign * baseline_sign * 0.1
 
-        if "s" in self.frame_idxs:
-            stereo_T = np.eye(4, dtype=np.float32)
-            baseline_sign = -1 if do_flip else 1
-            side_sign = -1 if side == "l" else 1
-            stereo_T[0, 3] = side_sign * baseline_sign * 0.1
-
-            inputs["stereo_T"] = torch.from_numpy(stereo_T)
-
+        # inputs["stereo_T"] = torch.from_numpy(stereo_T)
         return inputs
 
     def get_color(self, folder, frame_index, side, do_flip):
         raise NotImplementedError
+
+    def plotlib_image(self, image_paths):
+
+        fig, axes = plt.subplots(1, len(image_paths), figsize=(12, 4))  # Adjust figsize as needed
+        for i, image_path in enumerate(image_paths):
+            img = plt.imread(image_path)
+            axes[i].imshow(img)
+            axes[i].axis('off')
+
+        # Show the plot
+        plt.show()
+
+    def plot_image(self, image_path):
+        images = []
+
+        # Open and store the images
+        for path in image_path:
+            img = Image.open(path)
+            images.append(img)
+
+        # Display the images
+        for img in images:
+            img.show()
+        # img = Image.open(image_path)
+        #
+        # # Display some information about the image
+        # print("Image format:", img.format)  # Image format (e.g., JPEG)
+        # print("Image size:", img.size)  # Image dimensions (width, height)
+        #
+        # # Show the image (optional)
+        # img.show()
+
+        # Close the image
+        # img.close()
 
     def check_depth(self):
         raise NotImplementedError
@@ -212,4 +244,15 @@ class MonoDataset(data.Dataset):
         raise NotImplementedError
 
 
+if __name__ == "__main__":
+    filenames = sorted(os.listdir('/home/yoosof/Documents/GitHub/monodepth2/train/left'))
+    In = MonoDataset_C(
+        data_path='/home/yoosof/Documents/GitHub/monodepth2/train',
+        filenames=filenames,
+        height=256,
+        width=256,
 
+        num_scales=2,
+        is_train=True
+    )
+    print(In[0])
