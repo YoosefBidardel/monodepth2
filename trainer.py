@@ -28,7 +28,7 @@ from IPython import embed
 
 class Trainer:
     def __init__(self, options):
-        options.no_cuda =  True
+        options.no_cuda = True
         self.opt = options
         self.log_path = os.path.join(self.opt.log_dir, self.opt.model_name)
 
@@ -116,11 +116,13 @@ class Trainer:
                          "kitti_odom": datasets.KITTIOdomDataset,
                          "custom" : datasets.MonoDataset_C}
         self.dataset = datasets_dict[self.opt.dataset]
+        # a= os.path.dirname(__file__)
+        # fpath = os.path.join(os.path.dirname(__file__), "splits", self.opt.split, "{}_files.txt")
+        train_filenames = os.listdir(os.path.join(os.path.dirname(__file__), "SurgDepth", "train","left"))
+        val_filenames = os.listdir(os.path.join(os.path.dirname(__file__), "SurgDepth", "test","left"))
 
-        fpath = os.path.join(os.path.dirname(__file__), "splits", self.opt.split, "{}_files.txt")
-
-        train_filenames = readlines(fpath.format("train"))
-        val_filenames = readlines(fpath.format("val"))
+        # train_filenames = readlines(fpath.format("train"))
+        # val_filenames = readlines(fpath.format("val"))
         img_ext = '.png' if self.opt.png else '.jpg'
 
         num_train_samples = len(train_filenames)
@@ -223,7 +225,7 @@ class Trainer:
                     self.compute_depth_losses(inputs, outputs, losses)
 
                 self.log("train", inputs, outputs, losses)
-                self.val()
+                # self.val()
 
             self.step += 1
 
@@ -319,26 +321,26 @@ class Trainer:
 
         return outputs
 
-    def val(self):
-        """Validate the model on a single minibatch
-        """
-        self.set_eval()
-        try:
-            inputs = self.val_iter.next()
-        except StopIteration:
-            self.val_iter = iter(self.val_loader)
-            inputs = self.val_iter.next()
-
-        with torch.no_grad():
-            outputs, losses = self.process_batch(inputs)
-
-            if "depth_gt" in inputs:
-                self.compute_depth_losses(inputs, outputs, losses)
-
-            self.log("val", inputs, outputs, losses)
-            del inputs, outputs, losses
-
-        self.set_train()
+    # def val(self):
+    #     """Validate the model on a single minibatch
+    #     """
+    #     self.set_eval()
+    #     try:
+    #         inputs = self.val_iter.next()
+    #     except StopIteration:
+    #         self.val_iter = iter(self.val_loader)
+    #         inputs = self.val_iter.next()
+    #
+    #     with torch.no_grad():
+    #         outputs, losses = self.process_batch(inputs)
+    #
+    #         if "depth_gt" in inputs:
+    #             self.compute_depth_losses(inputs, outputs, losses)
+    #
+    #         self.log("val", inputs, outputs, losses)
+    #         del inputs, outputs, losses
+    #
+    #     self.set_train()
 
     def generate_images_pred(self, inputs, outputs):
         """Generate the warped (reprojected) color images for a minibatch.

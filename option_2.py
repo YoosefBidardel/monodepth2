@@ -20,7 +20,7 @@ class MonodepthOptions_2:
         self.parser.add_argument("--data_path",
                                  type=str,
                                  help="path to the training data",
-                                 default='/home/yoosof/Documents/GitHub/monodepth2/train')
+                                 default='C:\\Users\yooso\Internship\monodepth2\SurgDepth\\train')
         self.parser.add_argument("--log_dir",
                                  type=str,
                                  help="log directory",
@@ -44,19 +44,19 @@ class MonodepthOptions_2:
         self.parser.add_argument("--dataset",
                                  type=str,
                                  help="dataset to train on",
-                                 default="MonoDataset_C",
-                                 choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test","MonoDataset_C"])
+                                 default="custom",
+                                 choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test","custom"])
         self.parser.add_argument("--png",
                                  help="if set, trains from raw KITTI png files (instead of jpgs)",
                                  action="store_true")
         self.parser.add_argument("--height",
                                  type=int,
                                  help="input image height",
-                                 default=192)
+                                 default=256)
         self.parser.add_argument("--width",
                                  type=int,
                                  help="input image width",
-                                 default=640)
+                                 default=256)
         self.parser.add_argument("--disparity_smoothness",
                                  type=float,
                                  help="disparity smoothness weight",
@@ -81,13 +81,13 @@ class MonodepthOptions_2:
                                  nargs="+",
                                  type=int,
                                  help="frames to load",
-                                 default=[0, -1, 1])
+                                 default=[0, "s"]) #default=[0, -1, 1, "s"]
 
         # OPTIMIZATION options
         self.parser.add_argument("--batch_size",
                                  type=int,
                                  help="batch size",
-                                 default=12)
+                                 default=2)
         self.parser.add_argument("--learning_rate",
                                  type=float,
                                  help="learning rate",

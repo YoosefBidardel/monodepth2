@@ -6,7 +6,7 @@ import numpy as np
 import copy
 from PIL import Image  # using pillow-simd for increased speed
 from PIL import ImageFile
-
+import PIL.Image as pil
 import torch
 import torch.utils.data as data
 from torchvision import transforms
@@ -20,6 +20,43 @@ def pil_loader(path):
     with open(path, 'rb') as f:
         with Image.open(f) as img:
             return img.convert('RGB')
+
+
+def plotlib_image(image_paths):
+
+    fig, axes = plt.subplots(1, len(image_paths), figsize=(12, 4))  # Adjust figsize as needed
+    for i, image_path in enumerate(image_paths):
+        img = plt.imread(image_path)
+        axes[i].imshow(img)
+        axes[i].axis('off')
+
+    # Show the plot
+    plt.show()
+
+
+
+# def plot_image(image_path):
+#     images = []
+#
+#     # Open and store the images
+#     for path in image_path:
+#         img = Image.open(path)
+#         images.append(img)
+#
+#     # Display the images
+#     for img in images:
+#         img.show()
+    # img = Image.open(image_path)
+    #
+    # # Display some information about the image
+    # print("Image format:", img.format)  # Image format (e.g., JPEG)
+    # print("Image size:", img.size)  # Image dimensions (width, height)
+    #
+    # # Show the image (optional)
+    # img.show()
+
+    # Close the image
+    # img.close()
 
 
 class MonoDataset_C(data.Dataset):
@@ -41,18 +78,19 @@ class MonoDataset_C(data.Dataset):
                  filenames,
                  height,
                  width,
-
+                 frame_idxs,
                  num_scales,
-                 is_train=False,
+                 is_train=True,
                  img_ext='.png'):
-        super(MonoDataset, self).__init__()
+        super(MonoDataset_C, self).__init__()
 
         self.data_path = data_path
-        self.filenames = filenames
+        self.filenames = sorted(filenames)
         self.height = height
         self.width = width
         self.num_scales = num_scales
         self.interp = Image.LANCZOS
+        self.frame_idxs = frame_idxs
         self.K = np.array([[0.58, 0, 0.5, 0],
                            [0, 1.92, 0.5, 0],
                            [0, 0, 1, 0],
@@ -65,6 +103,7 @@ class MonoDataset_C(data.Dataset):
 
         self.loader = pil_loader
         self.to_tensor = transforms.ToTensor()
+        self.side_map = {"2": 2, "3": 3, "l": 2, "r": 3}
 
         # We need to specify augmentations differently in newer versions of torchvision.
         # We first try the newer tuple version; if this fails we fall back to scalars
@@ -98,16 +137,39 @@ class MonoDataset_C(data.Dataset):
         for k in list(inputs):
             frame = inputs[k]
             if "color" in k:
-                n, im, i = k
+                # n, im, s = k
+                n,im,i= k
+                # print(n,im,s)
+                # print(frame)
                 for i in range(self.num_scales):
-                    inputs[(n, im, i)] = self.resize[i](inputs[(n, im, i - 1)])
+                    # inputs[(n, im, s)] = self.resize[i](inputs[(n, im, s)])
+                    inputs[(n, im, i)] = self.resize[i](inputs[(n, im, i-1)])
+                # inputs[(n, im, i)] = self.resize[0](inputs[(n, im, i )])
+                # inputs[(n, im, i+1)] = self.resize[0](inputs[(n, im, i )])
+
+
+
 
         for k in list(inputs):
             f = inputs[k]
+            # print(f)
+
             if "color" in k:
+
+
                 n, im, i = k
+                # print('n,im,i: ',n,im,i)
                 inputs[(n, im, i)] = self.to_tensor(f)
-                inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(f))
+                # if type(color_aug) =='tuple':
+
+                # print(f' in the try loop, type: {type(color_aug)} and value: {color_aug}')
+
+                # inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(f))
+                inputs[(n + "_aug", im, i)] = inputs[(n, im, i)]
+
+
+
+                # print(f'in the exception, type: {type(color_aug)} and value: {color_aug}')
 
     def __len__(self):
         return len(self.filenames)
@@ -140,13 +202,17 @@ class MonoDataset_C(data.Dataset):
 
         do_color_aug = self.is_train and random.random() > 0.5
         do_flip = self.is_train and random.random() > 0.5
-
+        # print(self.filenames[index])
         line = self.filenames[index].split()
         folder = line[0]
         img_left = os.path.join(self.data_path, 'left', folder)
         img_right = os.path.join(self.data_path, 'right', folder)
-        self.plotlib_image([img_right, img_left])
-        self.plot_image([img_right, img_left])
+        inputs[("color","s",-1)] = self.loader(img_left)
+        inputs[("color", 0, -1)]= self.loader(img_right)
+
+        images = (img_left, img_right)
+        # plotlib_image([img_right, img_left])
+        # self.plot_image([img_right, img_left])
         if len(line) == 3:
             frame_index = int(line[1])
         else:
@@ -161,8 +227,8 @@ class MonoDataset_C(data.Dataset):
         #     if i == "s":
         #         other_side = {"r": "l", "l": "r"}[side]
         #         inputs[("color", i, -1)] = self.get_color(folder, frame_index, other_side, do_flip)
-        #     else:
-        #         inputs[("color", i, -1)] = self.get_color(folder, frame_index + i, side, do_flip)
+            # else:
+            #     inputs[("color", i, -1)] = self.get_color(folder, frame_index + i, side, do_flip)
 
         # adjusting intrinsics to match each scale in the pyramid
         for scale in range(self.num_scales):
@@ -182,76 +248,55 @@ class MonoDataset_C(data.Dataset):
             color_aug = (lambda x: x)
 
         self.preprocess(inputs, color_aug)
-        # for i in self.frame_idxs:
-        #     del inputs[("color", i, -1)]
-        #     del inputs[("color_aug", i, -1)]
+        for i in self.frame_idxs:
+            del inputs[("color", i, -1)]
+            del inputs[("color_aug", i, -1)]
 
         # if self.load_depth:
         #     depth_gt = self.get_depth(folder, frame_index, side, do_flip)
         #     inputs["depth_gt"] = np.expand_dims(depth_gt, 0)
         #     inputs["depth_gt"] = torch.from_numpy(inputs["depth_gt"].astype(np.float32))
 
-        # if "s" in self.frame_idxs:
-        #     stereo_T = np.eye(4, dtype=np.float32)
-        #     baseline_sign = -1 if do_flip else 1
-        #     side_sign = -1 if side == "l" else 1
-        #     stereo_T[0, 3] = side_sign * baseline_sign * 0.1
+        if "s" in self.frame_idxs:
+            stereo_T = np.eye(4, dtype=np.float32)
+            baseline_sign = -1 if do_flip else 1
+            side_sign = -1 if side == "l" else 1
+            stereo_T[0, 3] = side_sign * baseline_sign * 0.1
 
-        # inputs["stereo_T"] = torch.from_numpy(stereo_T)
+        inputs["stereo_T"] = torch.from_numpy(stereo_T)
         return inputs
 
+
     def get_color(self, folder, frame_index, side, do_flip):
-        raise NotImplementedError
+        color = self.loader(self.get_image_path(folder, frame_index, side))
 
-    def plotlib_image(self, image_paths):
+        if do_flip:
+            color = color.transpose(pil.FLIP_LEFT_RIGHT)
 
-        fig, axes = plt.subplots(1, len(image_paths), figsize=(12, 4))  # Adjust figsize as needed
-        for i, image_path in enumerate(image_paths):
-            img = plt.imread(image_path)
-            axes[i].imshow(img)
-            axes[i].axis('off')
+        return color
 
-        # Show the plot
-        plt.show()
+    # def check_depth(self):
+    #     raise NotImplementedError
 
-    def plot_image(self, image_path):
-        images = []
-
-        # Open and store the images
-        for path in image_path:
-            img = Image.open(path)
-            images.append(img)
-
-        # Display the images
-        for img in images:
-            img.show()
-        # img = Image.open(image_path)
-        #
-        # # Display some information about the image
-        # print("Image format:", img.format)  # Image format (e.g., JPEG)
-        # print("Image size:", img.size)  # Image dimensions (width, height)
-        #
-        # # Show the image (optional)
-        # img.show()
-
-        # Close the image
-        # img.close()
-
-    def check_depth(self):
-        raise NotImplementedError
-
-    def get_depth(self, folder, frame_index, side, do_flip):
-        raise NotImplementedError
-
+    # def get_depth(self, folder, frame_index, side, do_flip):
+    #     raise NotImplementedError
+    def get_image_path(self, folder, frame_index, side):
+        # f_str = "{:010d}{}".format(frame_index, self.img_ext)
+        # image_path = os.path.join(
+        #     self.data_path,
+        #     folder,
+        #     "image_0{}/data".format(self.side_map[side]),
+        #     f_str)
+        return os.path.join(self.data_path, 'left', folder)
 
 if __name__ == "__main__":
-    filenames = sorted(os.listdir('/home/yoosof/Documents/GitHub/monodepth2/train/left'))
+    filenames = os.listdir('C:\\Users\yooso\Internship\monodepth2\SurgDepth\\train\left')
     In = MonoDataset_C(
-        data_path='/home/yoosof/Documents/GitHub/monodepth2/train',
+        data_path='C:\\Users\yooso\Internship\monodepth2\SurgDepth\\train',
         filenames=filenames,
         height=256,
         width=256,
-
+        frame_idxs=[0, -1, 1, "s"],
         num_scales=2,
         is_train=True
     )

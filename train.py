@@ -8,8 +8,12 @@ from __future__ import absolute_import, division, print_function
 
 from trainer import Trainer
 from option_2 import MonodepthOptions_2
+from options import  MonodepthOptions
 
+
+# options = MonodepthOptions()
 options = MonodepthOptions_2()
+
 opts = options.parse()
 
 
